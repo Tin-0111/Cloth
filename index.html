@@ -1,0 +1,238 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>패션쇼 추천 도우미</title>
+<style>
+  body{font-family:system-ui,Segoe UI,Roboto,Arial; background:#f6f7fb; color:#111; padding:20px;}
+  h1{margin:0 0 12px;}
+  .board{display:flex; gap:12px; margin-bottom:16px; flex-wrap:wrap;}
+  .card{
+    position:relative;
+    width:120px; height:160px;
+    background:linear-gradient(180deg,#fff,#f0f4ff);
+    border-radius:12px; box-shadow:0 6px 14px rgba(20,30,80,.08);
+    display:flex; align-items:center; justify-content:center; flex-direction:column;
+    cursor:pointer; user-select:none;
+  }
+  .card .char{font-size:40px;font-weight:700;}
+  .card .num{font-size:20px; color:#333; margin-top:6px;}
+  .card .tag{
+    position:absolute; right:8px; top:8px;
+    width:28px;height:28px;border-radius:50%;
+    background:#fff; display:flex;align-items:center;justify-content:center;
+    border:1px solid #ddd; font-weight:700; cursor:pointer;
+  }
+  .card.recommended{outline:4px solid rgba(80,160,255,.14); box-shadow:0 8px 26px rgba(60,120,220,.12);}
+  .controls{margin-top:8px; display:flex; gap:12px; align-items:center; flex-wrap:wrap;}
+  button{padding:8px 14px; border-radius:10px; border:0; background:#356ee6; color:#fff; cursor:pointer; font-weight:600;}
+  button.secondary{background:#6c757d;}
+  .result{margin-top:14px; padding:12px; background:#fff; border-radius:10px; box-shadow:0 6px 14px rgba(20,30,80,.04);}
+  table{width:100%; border-collapse:collapse;}
+  th,td{padding:8px 6px; text-align:left; border-bottom:1px solid #efefef;}
+  .small{font-size:13px;color:#666;}
+  .pct{font-weight:800;}
+</style>
+</head>
+<body>
+  <h1>패션쇼 추천 도우미</h1>
+  <div class="small">상자 클릭 → 캐릭터(A→B→C→D→E). 오른쪽 원 클릭 → 숫자(1→...→7). 계산하기를 누르면 "한 장 초기화" 시 트리플 이상이 될 확률을 계산해 추천합니다.</div>
+
+  <div class="board" id="board"></div>
+
+  <div class="controls">
+    <button id="calcBtn">계산하기</button>
+    <button id="resetBtn" class="secondary">초기화(예제값 복원)</button>
+    <div class="small" style="margin-left:8px;">현재 목표: <strong>트리플 이상</strong></div>
+  </div>
+
+  <div class="result" id="resultArea" aria-live="polite">
+    <div class="small">아래에서 계산 결과가 표시됩니다.</div>
+  </div>
+
+<script>
+(() => {
+  const CHARS = ['A','B','C','D','E'];
+  const NUMS = [1,2,3,4,5,6,7];
+
+  // 기본 초기값 (원하면 바꿔서 시작)
+  const defaultCards = [
+    {c:'A', n:1},
+    {c:'B', n:2},
+    {c:'C', n:3},
+    {c:'D', n:4},
+    {c:'E', n:5},
+  ];
+
+  // UI 생성
+  const board = document.getElementById('board');
+  let cards = JSON.parse(JSON.stringify(defaultCards));
+
+  function render(){
+    board.innerHTML = '';
+    cards.forEach((card, i) => {
+      const el = document.createElement('div');
+      el.className = 'card';
+      el.dataset.index = i;
+
+      const tag = document.createElement('div');
+      tag.className = 'tag';
+      tag.textContent = card.n;
+      tag.title = '숫자(클릭하여 변경)';
+
+      // 클릭 이벤트: 카드(캐릭터 토글)
+      el.addEventListener('click', (ev) => {
+        // tag 클릭 handled separately
+        if(ev.target === tag) return;
+        const curIdx = CHARS.indexOf(cards[i].c);
+        cards[i].c = CHARS[(curIdx + 1) % CHARS.length];
+        render();
+      });
+
+      // 숫자 원 클릭: stopPropagation to prevent card click
+      tag.addEventListener('click', (ev) => {
+        ev.stopPropagation();
+        const curIdx = NUMS.indexOf(cards[i].n);
+        cards[i].n = NUMS[(curIdx + 1) % NUMS.length];
+        render();
+      });
+
+      const charEl = document.createElement('div');
+      charEl.className = 'char';
+      charEl.textContent = card.c;
+
+      const numEl = document.createElement('div');
+      numEl.className = 'num';
+      numEl.textContent = '번호';
+
+      el.appendChild(tag);
+      el.appendChild(charEl);
+      el.appendChild(numEl);
+      board.appendChild(el);
+    });
+  }
+
+  // 손 족보 평가 함수
+  // 반환값: rankValue (0..9) 및 rankName
+  function evaluateHand(arr){ // arr: [{c,n},...5]
+    const nums = arr.map(x=>x.n);
+    const chars = arr.map(x=>x.c);
+
+    // counts
+    const numCounts = {};
+    nums.forEach(x=>numCounts[x] = (numCounts[x]||0)+1);
+    const counts = Object.values(numCounts).sort((a,b)=>b-a); // 내림차순
+
+    const allSameChar = chars.every(x=>x === chars[0]);
+    const uniqueNums = Array.from(new Set(nums)).sort((a,b)=>a-b);
+
+    const isFiveKind = counts.length===1 && counts[0] === 5;
+    const isFour = counts[0] === 4;
+    const isTriple = counts[0] === 3 && (counts[1]||0) !== 2;
+    const isFullHouse = counts[0] === 3 && counts[1] === 2;
+    const isTwoPair = counts[0] === 2 && counts[1] === 2;
+    const isOnePair = counts[0] === 2 && (counts[1]||0) !== 2;
+    // straight: 5 distinct numbers and max-min == 4
+    const isStraight = (uniqueNums.length === 5) && (Math.max(...nums) - Math.min(...nums) === 4);
+
+    const isFlush = allSameChar;
+    const isStraightFlush = isStraight && isFlush;
+
+    // Rank mapping according to user's order (higher is better)
+    // 9: FiveCard, 8: StraightFlush, 7: Flush, 6: FourKind, 5: FullHouse, 4: Straight, 3: Triple, 2: TwoPair, 1: OnePair, 0: None
+    if(isFiveKind) return {value:9, name:'파이브카드'};
+    if(isStraightFlush) return {value:8, name:'스트레이트 플러시'};
+    if(isFlush) return {value:7, name:'플러시'};
+    if(isFour) return {value:6, name:'포카드(4장)'};
+    if(isFullHouse) return {value:5, name:'풀하우스'};
+    if(isStraight) return {value:4, name:'스트레이트'};
+    if(isTriple) return {value:3, name:'트리플'};
+    if(isTwoPair) return {value:2, name:'투페어'};
+    if(isOnePair) return {value:1, name:'원페어'};
+    return {value:0, name:'조합 없음'};
+  }
+
+  // 주어진 현재 5장 상태에서, index번째 카드를 교체했을 때(무작위 A~E,1~7 동등)
+  // 트리플 이상(>=3) 이 될 확률을 계산
+  function computeProbIfReplace(index){
+    let success = 0;
+    const total = CHARS.length * NUMS.length; // 35
+    for(const c of CHARS){
+      for(const n of NUMS){
+        // 새 패
+        const newHand = cards.map((x, i) => i===index ? {c,n} : {c:x.c, n:x.n});
+        const rank = evaluateHand(newHand);
+        if(rank.value >= 3) success++;
+      }
+    }
+    return {success, total, prob: success/total};
+  }
+
+  // 전체 추천 계산
+  function calculateAll(){
+    const results = cards.map((_,i) => {
+      return {...computeProbIfReplace(i), index:i};
+    });
+    // best prob
+    const best = Math.max(...results.map(r=>r.prob));
+    return {results, best};
+  }
+
+  // UI: 표시
+  const resultArea = document.getElementById('resultArea');
+  function showResults(calc){
+    // remove recommended style
+    document.querySelectorAll('.card').forEach(n=>n.classList.remove('recommended'));
+
+    let html = `<div><strong>현재 손:</strong> ${cards.map((x,i)=>`[${i+1}] ${x.c}${x.n}`).join(' , ')}</div>`;
+    html += `<table><thead><tr><th>상자</th><th>초기화 시 성공 횟수 / 전체</th><th>성공 확률</th></tr></thead><tbody>`;
+    calc.results.forEach(r=>{
+      html += `<tr${r.prob === calc.best ? ' style="background:linear-gradient(90deg,#eef7ff,#fff);"' : ''}>
+        <td>[${r.index+1}] ${cards[r.index].c}${cards[r.index].n}${r.prob === calc.best ? ' ← 추천' : ''}</td>
+        <td>${r.success} / ${r.total}</td>
+        <td class="pct">${(r.prob*100).toFixed(2)}%</td>
+      </tr>`;
+    });
+    html += `</tbody></table>`;
+    // list bests
+    const bestIndices = calc.results.filter(r=>r.prob === calc.best).map(r=>r.index);
+    html += `<div style="margin-top:10px;"><strong>추천:</strong> `;
+    if(calc.best === 0){
+      html += `어떤 상자를 초기화해도 트리플 이상으로 올라갈 확률이 없습니다 (모든 확률 0%).`;
+    } else {
+      html += bestIndices.map(i=>`[${i+1}] ${cards[i].c}${cards[i].n}`).join(', ');
+      html += ` — 성공 확률 ${(calc.best*100).toFixed(2)}%`;
+    }
+    html += `</div>`;
+
+    resultArea.innerHTML = html;
+
+    // highlight recommended cards
+    bestIndices.forEach(i=>{
+      const el = document.querySelector(`.card[data-index="${i}"]`);
+      if(el) el.classList.add('recommended');
+    });
+  }
+
+  // event listeners
+  document.getElementById('calcBtn').addEventListener('click', ()=>{
+    const calc = calculateAll();
+    showResults(calc);
+  });
+
+  document.getElementById('resetBtn').addEventListener('click', ()=>{
+    cards = JSON.parse(JSON.stringify(defaultCards));
+    render();
+    resultArea.innerHTML = `<div class="small">초기값으로 복원했습니다. 필요한 경우 카드값을 바꾼 뒤 '계산하기'를 눌러주세요.</div>`;
+  });
+
+  // initial render
+  render();
+
+  // Expose for debugging (optional)
+  window._fashion_helper = {cards, evaluateHand, computeProbIfReplace, calculateAll};
+})();
+</script>
+</body>
+</html>
