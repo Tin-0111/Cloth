@@ -2,25 +2,26 @@
 <html lang="ko">
 <head>
 <meta charset="UTF-8">
-<title>카드 조합 확률 계산기</title>
+<title>패션쇼 추천 도우미</title>
 <style>
-  body { font-family: Arial, sans-serif; padding: 20px; }
-  .controls { margin-bottom: 10px; }
-  .cards { display: flex; gap: 5px; margin-bottom: 10px; }
-  .card { display: flex; flex-direction: column; align-items: center; border: 1px solid #ccc; padding: 5px; width: 80px; }
-  select { width: 70px; }
-  table { border-collapse: collapse; margin-bottom: 20px; width: 100%; }
-  th, td { border: 1px solid #aaa; padding: 4px; text-align: center; }
-  th { background: #eee; }
-  .best { background: #ff0; }
+  body { font-family: sans-serif; padding: 20px; }
+  .card-inputs { display: flex; gap: 8px; margin-bottom: 12px; }
+  .card { display: flex; flex-direction: column; align-items: center; }
+  .controls { margin-bottom: 12px; }
+  .results { margin-top: 20px; }
+  table { border-collapse: collapse; margin-bottom: 20px; }
+  th, td { border: 1px solid #ccc; padding: 4px 8px; text-align: center; }
+  th { background: #f0f0f0; }
 </style>
 </head>
 <body>
-<h1>카드 교체 확률 계산기</h1>
+
+<h2>패션쇼 추천 도우미</h2>
+
+<div class="card-inputs" id="cardInputs"></div>
 
 <div class="controls">
   <button id="calcBtn">계산하기</button>
-  <button id="resetBtn">초기화(예제값)</button>
   <label style="margin-left:8px;">
     현재 목표:
     <select id="targetRank">
@@ -38,143 +39,121 @@
   </label>
 </div>
 
-<div class="cards" id="cardsContainer"></div>
-<div id="results"></div>
+<div class="results" id="results"></div>
 
 <script>
-const CHARS = ["하", "꽃", "초", "동", "피"];
-const NUMS = ["1", "2", "3", "4", "5", "6", "7"];
+const CHARS = ['A','B','C','D','E','F','G']; // 7종
+const NUMS = [1,2,3,4,5]; // 5종
 
-let cards = [
-  { c: "하", n: "1" },
-  { c: "하", n: "2" },
-  { c: "꽃", n: "1" },
-  { c: "초", n: "1" },
-  { c: "피", n: "1" }
+const RANKS = [
+  "조합 없음",
+  "원페어",
+  "투페어",
+  "트리플",
+  "스트레이트",
+  "풀하우스",
+  "포카드",
+  "플러시",
+  "스트레이트 플러시",
+  "파이브카드"
 ];
 
-// 족보 판정
-function evaluateHand(hand) {
-  const nums = hand.map(c => parseInt(c.n));
-  const chars = hand.map(c => c.c);
-  const numCounts = {};
-  nums.forEach(n => numCounts[n] = (numCounts[n] || 0) + 1);
-  const counts = Object.values(numCounts).sort((a,b) => b-a);
-  const charCounts = {};
-  chars.forEach(c => charCounts[c] = (charCounts[c] || 0) + 1);
-
-  const isFlush = Object.keys(charCounts).length === 1;
-  const sortedNums = [...new Set(nums)].sort((a,b) => a-b);
-  const isStraight = sortedNums.length === 5 && sortedNums[4]-sortedNums[0] === 4;
-
-  let value = 0, name = "조합 없음";
-  if (counts[0] === 5) { value=9; name="파이브카드"; }
-  else if (isStraight && isFlush) { value=8; name="스트레이트 플러시"; }
-  else if (counts[0] === 4) { value=6; name="포카드"; }
-  else if (counts[0] === 3 && counts[1] === 2) { value=5; name="풀하우스"; }
-  else if (isFlush) { value=7; name="플러시"; }
-  else if (isStraight) { value=4; name="스트레이트"; }
-  else if (counts[0] === 3) { value=3; name="트리플"; }
-  else if (counts[0] === 2 && counts[1] === 2) { value=2; name="투페어"; }
-  else if (counts[0] === 2) { value=1; name="원페어"; }
-
-  return { value, name };
-}
-
-function createCardSelectors() {
-  const cont = document.getElementById("cardsContainer");
-  cont.innerHTML = "";
-  cards.forEach((card, i) => {
-    const div = document.createElement("div");
-    div.className = "card";
-
-    const selC = document.createElement("select");
-    CHARS.forEach(ch => {
-      const opt = document.createElement("option");
-      opt.value = ch; opt.textContent = ch;
-      if (card.c === ch) opt.selected = true;
-      selC.appendChild(opt);
-    });
-    selC.addEventListener("change", e => { cards[i].c = e.target.value; });
-
-    const selN = document.createElement("select");
-    NUMS.forEach(num => {
-      const opt = document.createElement("option");
-      opt.value = num; opt.textContent = num;
-      if (card.n === num) opt.selected = true;
-      selN.appendChild(opt);
-    });
-    selN.addEventListener("change", e => { cards[i].n = e.target.value; });
-
-    div.appendChild(selC);
-    div.appendChild(selN);
-    cont.appendChild(div);
+// 카드 입력 UI 생성
+const cardInputs = document.getElementById('cardInputs');
+const cards = [];
+for(let i=0; i<5; i++){
+  const div = document.createElement('div');
+  div.className = 'card';
+  const selC = document.createElement('select');
+  CHARS.forEach(c=>{
+    const opt=document.createElement('option');
+    opt.value=c; opt.textContent=c;
+    selC.appendChild(opt);
   });
+  const selN = document.createElement('select');
+  NUMS.forEach(n=>{
+    const opt=document.createElement('option');
+    opt.value=n; opt.textContent=n;
+    selN.appendChild(opt);
+  });
+  div.appendChild(selC);
+  div.appendChild(selN);
+  cardInputs.appendChild(div);
+  cards.push({cSel: selC, nSel: selN});
 }
 
-function computeExactProb(index, targetValue) {
-  let success = 0;
+// 핸드 평가 함수
+function evaluateHand(hand){
+  const countsNum={}, countsChar={};
+  const nums = hand.map(c=>c.n).sort((a,b)=>a-b);
+  const chars = hand.map(c=>c.c);
+  nums.forEach(n=>countsNum[n]=(countsNum[n]||0)+1);
+  chars.forEach(ch=>countsChar[ch]=(countsChar[ch]||0)+1);
+  const isFlush = Object.keys(countsChar).length === 1;
+  const isStraight = nums.every((n,i)=> i===0 || n===nums[0]+i);
+  const vals = Object.values(countsNum).sort((a,b)=>b-a);
+  if(vals[0]===5) return {value:9, name:"파이브카드"};
+  if(isFlush && isStraight) return {value:8, name:"스트레이트 플러시"};
+  if(vals[0]===4) return {value:6, name:"포카드"};
+  if(vals[0]===3 && vals[1]===2) return {value:5, name:"풀하우스"};
+  if(isFlush) return {value:7, name:"플러시"};
+  if(isStraight) return {value:4, name:"스트레이트"};
+  if(vals[0]===3) return {value:3, name:"트리플"};
+  if(vals[0]===2 && vals[1]===2) return {value:2, name:"투페어"};
+  if(vals[0]===2) return {value:1, name:"원페어"};
+  return {value:0, name:"조합 없음"};
+}
+
+// 특정 족보 "정확히" 확률 계산
+function computeExactProbIfReplace(index, targetValue){
+  let success=0;
   const total = CHARS.length * NUMS.length;
-  for (const c of CHARS) {
-    for (const n of NUMS) {
-      const newHand = cards.map((x, i) => i === index ? { c, n } : { c: x.c, n: x.n });
+  for(const c of CHARS){
+    for(const n of NUMS){
+      const newHand = cards.map((x,i)=>
+        i===index ? {c, n:parseInt(n)} : {c:x.cSel.value, n:parseInt(x.nSel.value)}
+      );
       const rank = evaluateHand(newHand);
-      if (rank.value === targetValue) success++;
+      if(rank.value === targetValue) success++;
     }
   }
-  return { success, total, prob: success / total };
+  return {success, total, prob: success/total};
 }
 
-function calculateAllExact(targetValue) {
-  const results = cards.map((_, i) => {
-    return { ...computeExactProb(i, targetValue), index: i };
-  });
-  const best = Math.max(...results.map(r => r.prob));
-  return { results, best };
-}
-
-function showResultsForRank(rankValue, rankName) {
-  const calc = calculateAllExact(rankValue);
-  const tbl = document.createElement("table");
-  const cap = document.createElement("caption");
-  cap.textContent = `${rankName} 확률`;
-  tbl.appendChild(cap);
-  tbl.innerHTML += `<tr><th>카드 위치</th><th>성공 수</th><th>전체 경우</th><th>확률</th></tr>`;
-  calc.results.forEach(r => {
-    const tr = document.createElement("tr");
-    if (r.prob === calc.best && r.success > 0) tr.classList.add("best");
-    tr.innerHTML = `<td>${r.index+1}</td><td>${r.success}</td><td>${r.total}</td><td>${(r.prob*100).toFixed(2)}%</td>`;
-    tbl.appendChild(tr);
-  });
-  document.getElementById("results").appendChild(tbl);
-}
-
-document.getElementById("calcBtn").addEventListener("click", () => {
-  const minValue = parseInt(document.getElementById("targetRank").value, 10);
-  document.getElementById("results").innerHTML = "";
-  for (let v = minValue; v <= 9; v++) {
-    const tmpHandName = evaluateHand([
-      {c:"하",n:"1"},{c:"하",n:"1"},{c:"하",n:"1"},{c:"하",n:"1"},{c:"하",n:"1"}
-    ]);
-    // 이름 얻기 위해 value만 교체
-    const rankNames = ["조합 없음","원페어","투페어","트리플","스트레이트","풀하우스","포카드","플러시","스트레이트 플러시","파이브카드"];
-    showResultsForRank(v, rankNames[v]);
+// 모든 카드 위치에 대해 계산
+function calculateAllForRank(targetValue){
+  const results = [];
+  for(let i=0;i<5;i++){
+    results.push({index:i, ...computeExactProbIfReplace(i, targetValue)});
   }
-});
+  return results;
+}
 
-document.getElementById("resetBtn").addEventListener("click", () => {
-  cards = [
-    { c: "하", n: "1" },
-    { c: "하", n: "2" },
-    { c: "꽃", n: "1" },
-    { c: "초", n: "1" },
-    { c: "피", n: "1" }
-  ];
-  createCardSelectors();
-  document.getElementById("results").innerHTML = "";
-});
+// 결과 표시
+function showResults(startValue){
+  const container = document.getElementById('results');
+  container.innerHTML = "";
+  for(let v=startValue; v<=9; v++){
+    const results = calculateAllForRank(v);
+    const table = document.createElement('table');
+    const caption = document.createElement('caption');
+    caption.textContent = `${RANKS[v]} 확률`;
+    table.appendChild(caption);
+    table.innerHTML += "<tr><th>카드 위치</th><th>성공</th><th>전체</th><th>확률</th></tr>";
+    results.forEach(r=>{
+      const tr = document.createElement('tr');
+      tr.innerHTML = `<td>${r.index+1}</td><td>${r.success}</td><td>${r.total}</td><td>${(r.prob*100).toFixed(2)}%</td>`;
+      table.appendChild(tr);
+    });
+    container.appendChild(table);
+  }
+}
 
-createCardSelectors();
+// 이벤트
+document.getElementById('calcBtn').addEventListener('click', ()=>{
+  const minValue = parseInt(document.getElementById('targetRank').value,10);
+  showResults(minValue);
+});
 </script>
 </body>
 </html>
