@@ -1,159 +1,237 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="ko">
 <head>
-<meta charset="UTF-8">
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
 <title>패션쇼 추천 도우미</title>
 <style>
-  body { font-family: sans-serif; padding: 20px; }
-  .card-inputs { display: flex; gap: 8px; margin-bottom: 12px; }
-  .card { display: flex; flex-direction: column; align-items: center; }
-  .controls { margin-bottom: 12px; }
-  .results { margin-top: 20px; }
-  table { border-collapse: collapse; margin-bottom: 20px; }
-  th, td { border: 1px solid #ccc; padding: 4px 8px; text-align: center; }
-  th { background: #f0f0f0; }
+  body{font-family:system-ui,Segoe UI,Roboto,Arial; background:#f6f7fb; color:#111; padding:20px;}
+  h1{margin:0 0 12px;}
+  .board{display:flex; gap:12px; margin-bottom:16px; flex-wrap:wrap;}
+  .card{
+    position:relative;
+    width:120px; height:160px;
+    background:linear-gradient(180deg,#fff,#f0f4ff);
+    border-radius:12px; box-shadow:0 6px 14px rgba(20,30,80,.08);
+    display:flex; align-items:center; justify-content:center; flex-direction:column;
+    cursor:pointer; user-select:none;
+  }
+  .card .char{font-size:40px;font-weight:700;}
+  .card .num{font-size:20px; color:#333; margin-top:6px;}
+  .card .tag{
+    position:absolute; right:8px; top:8px;
+    width:28px;height:28px;border-radius:50%;
+    background:#fff; display:flex;align-items:center;justify-content:center;
+    border:1px solid #ddd; font-weight:700; cursor:pointer;
+  }
+  .card.recommended{outline:4px solid rgba(80,160,255,.14); box-shadow:0 8px 26px rgba(60,120,220,.12);}
+  .controls{margin-top:8px; display:flex; gap:12px; align-items:center; flex-wrap:wrap;}
+  button{padding:8px 14px; border-radius:10px; border:0; background:#356ee6; color:#fff; cursor:pointer; font-weight:600;}
+  button.secondary{background:#6c757d;}
+  .result{margin-top:14px; padding:12px; background:#fff; border-radius:10px; box-shadow:0 6px 14px rgba(20,30,80,.04);}
+  table{width:100%; border-collapse:collapse;}
+  th,td{padding:8px 6px; text-align:left; border-bottom:1px solid #efefef;}
+  .small{font-size:13px;color:#666;}
+  .pct{font-weight:800;}
 </style>
 </head>
 <body>
+  <h1>패션쇼 추천 도우미</h1>
+  <div class="small">상자 클릭 → 캐릭터(A→B→C→D→E). 오른쪽 원 클릭 → 숫자(1→...→7). 계산하기를 누르면 선택한 목표 이상이 될 확률을 계산해 추천합니다.</div>
 
-<h2>패션쇼 추천 도우미</h2>
+  <div class="board" id="board"></div>
 
-<div class="card-inputs" id="cardInputs"></div>
+  <div class="controls">
+    <button id="calcBtn">계산하기</button>
+    <button id="resetBtn" class="secondary">초기화(예제값 복원)</button>
+    <label class="small" style="margin-left:8px;">
+      현재 목표:
+      <select id="targetRank">
+        <option value="0">조합 없음</option>
+        <option value="1">원페어</option>
+        <option value="2">투페어</option>
+        <option value="3" selected>트리플</option>
+        <option value="4">스트레이트</option>
+        <option value="5">풀하우스</option>
+        <option value="6">포카드</option>
+        <option value="7">플러시</option>
+        <option value="8">스트레이트 플러시</option>
+        <option value="9">파이브카드</option>
+      </select>
+    </label>
+  </div>
 
-<div class="controls">
-  <button id="calcBtn">계산하기</button>
-  <label style="margin-left:8px;">
-    현재 목표:
-    <select id="targetRank">
-      <option value="0">조합 없음</option>
-      <option value="1">원페어</option>
-      <option value="2">투페어</option>
-      <option value="3" selected>트리플</option>
-      <option value="4">스트레이트</option>
-      <option value="5">풀하우스</option>
-      <option value="6">포카드</option>
-      <option value="7">플러시</option>
-      <option value="8">스트레이트 플러시</option>
-      <option value="9">파이브카드</option>
-    </select>
-  </label>
-</div>
-
-<div class="results" id="results"></div>
+  <div class="result" id="resultArea" aria-live="polite">
+    <div class="small">아래에서 계산 결과가 표시됩니다.</div>
+  </div>
 
 <script>
-const CHARS = ['A','B','C','D','E','F','G']; // 7종
-const NUMS = [1,2,3,4,5]; // 5종
+(() => {
+  const CHARS = ['A','B','C','D','E'];
+  const NUMS = [1,2,3,4,5,6,7];
+  const RANK_NAMES = [
+    '조합 없음','원페어','투페어','트리플','스트레이트',
+    '풀하우스','포카드','플러시','스트레이트 플러시','파이브카드'
+  ];
 
-const RANKS = [
-  "조합 없음",
-  "원페어",
-  "투페어",
-  "트리플",
-  "스트레이트",
-  "풀하우스",
-  "포카드",
-  "플러시",
-  "스트레이트 플러시",
-  "파이브카드"
-];
+  const defaultCards = [
+    {c:'A', n:1},
+    {c:'B', n:2},
+    {c:'C', n:3},
+    {c:'D', n:4},
+    {c:'E', n:5},
+  ];
 
-// 카드 입력 UI 생성
-const cardInputs = document.getElementById('cardInputs');
-const cards = [];
-for(let i=0; i<5; i++){
-  const div = document.createElement('div');
-  div.className = 'card';
-  const selC = document.createElement('select');
-  CHARS.forEach(c=>{
-    const opt=document.createElement('option');
-    opt.value=c; opt.textContent=c;
-    selC.appendChild(opt);
-  });
-  const selN = document.createElement('select');
-  NUMS.forEach(n=>{
-    const opt=document.createElement('option');
-    opt.value=n; opt.textContent=n;
-    selN.appendChild(opt);
-  });
-  div.appendChild(selC);
-  div.appendChild(selN);
-  cardInputs.appendChild(div);
-  cards.push({cSel: selC, nSel: selN});
-}
+  const board = document.getElementById('board');
+  let cards = JSON.parse(JSON.stringify(defaultCards));
 
-// 핸드 평가 함수
-function evaluateHand(hand){
-  const countsNum={}, countsChar={};
-  const nums = hand.map(c=>c.n).sort((a,b)=>a-b);
-  const chars = hand.map(c=>c.c);
-  nums.forEach(n=>countsNum[n]=(countsNum[n]||0)+1);
-  chars.forEach(ch=>countsChar[ch]=(countsChar[ch]||0)+1);
-  const isFlush = Object.keys(countsChar).length === 1;
-  const isStraight = nums.every((n,i)=> i===0 || n===nums[0]+i);
-  const vals = Object.values(countsNum).sort((a,b)=>b-a);
-  if(vals[0]===5) return {value:9, name:"파이브카드"};
-  if(isFlush && isStraight) return {value:8, name:"스트레이트 플러시"};
-  if(vals[0]===4) return {value:6, name:"포카드"};
-  if(vals[0]===3 && vals[1]===2) return {value:5, name:"풀하우스"};
-  if(isFlush) return {value:7, name:"플러시"};
-  if(isStraight) return {value:4, name:"스트레이트"};
-  if(vals[0]===3) return {value:3, name:"트리플"};
-  if(vals[0]===2 && vals[1]===2) return {value:2, name:"투페어"};
-  if(vals[0]===2) return {value:1, name:"원페어"};
-  return {value:0, name:"조합 없음"};
-}
+  function render(){
+    board.innerHTML = '';
+    cards.forEach((card, i) => {
+      const el = document.createElement('div');
+      el.className = 'card';
+      el.dataset.index = i;
 
-// 특정 족보 "정확히" 확률 계산
-function computeExactProbIfReplace(index, targetValue){
-  let success=0;
-  const total = CHARS.length * NUMS.length;
-  for(const c of CHARS){
-    for(const n of NUMS){
-      const newHand = cards.map((x,i)=>
-        i===index ? {c, n:parseInt(n)} : {c:x.cSel.value, n:parseInt(x.nSel.value)}
-      );
-      const rank = evaluateHand(newHand);
-      if(rank.value === targetValue) success++;
-    }
-  }
-  return {success, total, prob: success/total};
-}
+      const tag = document.createElement('div');
+      tag.className = 'tag';
+      tag.textContent = card.n;
+      tag.title = '숫자(클릭하여 변경)';
 
-// 모든 카드 위치에 대해 계산
-function calculateAllForRank(targetValue){
-  const results = [];
-  for(let i=0;i<5;i++){
-    results.push({index:i, ...computeExactProbIfReplace(i, targetValue)});
-  }
-  return results;
-}
+      el.addEventListener('click', (ev) => {
+        if(ev.target === tag) return;
+        const curIdx = CHARS.indexOf(cards[i].c);
+        cards[i].c = CHARS[(curIdx + 1) % CHARS.length];
+        render();
+      });
 
-// 결과 표시
-function showResults(startValue){
-  const container = document.getElementById('results');
-  container.innerHTML = "";
-  for(let v=startValue; v<=9; v++){
-    const results = calculateAllForRank(v);
-    const table = document.createElement('table');
-    const caption = document.createElement('caption');
-    caption.textContent = `${RANKS[v]} 확률`;
-    table.appendChild(caption);
-    table.innerHTML += "<tr><th>카드 위치</th><th>성공</th><th>전체</th><th>확률</th></tr>";
-    results.forEach(r=>{
-      const tr = document.createElement('tr');
-      tr.innerHTML = `<td>${r.index+1}</td><td>${r.success}</td><td>${r.total}</td><td>${(r.prob*100).toFixed(2)}%</td>`;
-      table.appendChild(tr);
+      tag.addEventListener('click', (ev) => {
+        ev.stopPropagation();
+        const curIdx = NUMS.indexOf(cards[i].n);
+        cards[i].n = NUMS[(curIdx + 1) % NUMS.length];
+        render();
+      });
+
+      const charEl = document.createElement('div');
+      charEl.className = 'char';
+      charEl.textContent = card.c;
+
+      const numEl = document.createElement('div');
+      numEl.className = 'num';
+      numEl.textContent = '번호';
+
+      el.appendChild(tag);
+      el.appendChild(charEl);
+      el.appendChild(numEl);
+      board.appendChild(el);
     });
-    container.appendChild(table);
   }
-}
 
-// 이벤트
-document.getElementById('calcBtn').addEventListener('click', ()=>{
-  const minValue = parseInt(document.getElementById('targetRank').value,10);
-  showResults(minValue);
-});
+  function evaluateHand(arr){
+    const nums = arr.map(x=>x.n);
+    const chars = arr.map(x=>x.c);
+
+    const numCounts = {};
+    nums.forEach(x=>numCounts[x] = (numCounts[x]||0)+1);
+    const counts = Object.values(numCounts).sort((a,b)=>b-a);
+
+    const allSameChar = chars.every(x=>x === chars[0]);
+    const uniqueNums = Array.from(new Set(nums)).sort((a,b)=>a-b);
+
+    const isFiveKind = counts.length===1 && counts[0] === 5;
+    const isFour = counts[0] === 4;
+    const isTriple = counts[0] === 3 && (counts[1]||0) !== 2;
+    const isFullHouse = counts[0] === 3 && counts[1] === 2;
+    const isTwoPair = counts[0] === 2 && counts[1] === 2;
+    const isOnePair = counts[0] === 2 && (counts[1]||0) !== 2;
+    const isStraight = (uniqueNums.length === 5) && (Math.max(...nums) - Math.min(...nums) === 4);
+    const isFlush = allSameChar;
+    const isStraightFlush = isStraight && isFlush;
+
+    if(isFiveKind) return {value:9, name:'파이브카드'};
+    if(isStraightFlush) return {value:8, name:'스트레이트 플러시'};
+    if(isFlush) return {value:7, name:'플러시'};
+    if(isFour) return {value:6, name:'포카드'};
+    if(isFullHouse) return {value:5, name:'풀하우스'};
+    if(isStraight) return {value:4, name:'스트레이트'};
+    if(isTriple) return {value:3, name:'트리플'};
+    if(isTwoPair) return {value:2, name:'투페어'};
+    if(isOnePair) return {value:1, name:'원페어'};
+    return {value:0, name:'조합 없음'};
+  }
+
+  function computeProbIfReplace(index, minValue){
+    let success = 0;
+    const total = CHARS.length * NUMS.length;
+    for(const c of CHARS){
+      for(const n of NUMS){
+        const newHand = cards.map((x, i) => i===index ? {c,n} : {c:x.c, n:x.n});
+        const rank = evaluateHand(newHand);
+        if(rank.value >= minValue) success++;
+      }
+    }
+    return {success, total, prob: success/total};
+  }
+
+  function calculateAll(minValue){
+    const results = cards.map((_,i) => {
+      return {...computeProbIfReplace(i, minValue), index:i};
+    });
+    const best = Math.max(...results.map(r=>r.prob));
+    return {results, best};
+  }
+
+  function calculateAllRanks(startValue){
+    let rankResults = {};
+    for(let v=startValue; v<=9; v++){
+      rankResults[v] = calculateAll(v);
+    }
+    return rankResults;
+  }
+
+  const resultArea = document.getElementById('resultArea');
+  function showResults(allRankResults, startValue){
+    document.querySelectorAll('.card').forEach(n=>n.classList.remove('recommended'));
+
+    let html = `<div><strong>현재 손:</strong> ${cards.map((x,i)=>`[${i+1}] ${x.c}${x.n}`).join(' , ')}</div>`;
+
+    for(let v=startValue; v<=9; v++){
+      const calc = allRankResults[v];
+      html += `<h4 style="margin-top:12px;">목표: ${RANK_NAMES[v]} 이상</h4>`;
+      html += `<table><thead><tr><th>상자</th><th>성공 횟수 / 전체</th><th>성공 확률</th></tr></thead><tbody>`;
+      calc.results.forEach(r=>{
+        html += `<tr${r.prob === calc.best ? ' style="background:linear-gradient(90deg,#eef7ff,#fff);"' : ''}>
+          <td>[${r.index+1}] ${cards[r.index].c}${cards[r.index].n}${r.prob === calc.best ? ' ← 추천' : ''}</td>
+          <td>${r.success} / ${r.total}</td>
+          <td class="pct">${(r.prob*100).toFixed(2)}%</td>
+        </tr>`;
+      });
+      html += `</tbody></table>`;
+    }
+
+    resultArea.innerHTML = html;
+
+    // 마지막 선택 목표에 대한 추천만 강조
+    const bestIndices = allRankResults[startValue].results.filter(r=>r.prob === allRankResults[startValue].best).map(r=>r.index);
+    bestIndices.forEach(i=>{
+      const el = document.querySelector(`.card[data-index="${i}"]`);
+      if(el) el.classList.add('recommended');
+    });
+  }
+
+  document.getElementById('calcBtn').addEventListener('click', ()=>{
+    const minValue = parseInt(document.getElementById('targetRank').value, 10);
+    const allRankResults = calculateAllRanks(minValue);
+    showResults(allRankResults, minValue);
+  });
+
+  document.getElementById('resetBtn').addEventListener('click', ()=>{
+    cards = JSON.parse(JSON.stringify(defaultCards));
+    render();
+    resultArea.innerHTML = `<div class="small">초기값으로 복원했습니다. 목표를 선택한 뒤 '계산하기'를 눌러주세요.</div>`;
+  });
+
+  render();
+})();
 </script>
 </body>
 </html>
