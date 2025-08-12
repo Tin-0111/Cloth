@@ -69,6 +69,10 @@
 (() => {
   const CHARS = ['A','B','C','D','E'];
   const NUMS = [1,2,3,4,5,6,7];
+  const RANK_NAMES = [
+    '조합 없음','원페어','투페어','트리플','스트레이트',
+    '풀하우스','포카드','플러시','스트레이트 플러시','파이브카드'
+  ];
 
   const defaultCards = [
     {c:'A', n:1},
@@ -176,32 +180,38 @@
     return {results, best};
   }
 
+  function calculateAllRanks(startValue){
+    let rankResults = {};
+    for(let v=startValue; v<=9; v++){
+      rankResults[v] = calculateAll(v);
+    }
+    return rankResults;
+  }
+
   const resultArea = document.getElementById('resultArea');
-  function showResults(calc){
+  function showResults(allRankResults, startValue){
     document.querySelectorAll('.card').forEach(n=>n.classList.remove('recommended'));
 
     let html = `<div><strong>현재 손:</strong> ${cards.map((x,i)=>`[${i+1}] ${x.c}${x.n}`).join(' , ')}</div>`;
-    html += `<table><thead><tr><th>상자</th><th>초기화 시 성공 횟수 / 전체</th><th>성공 확률</th></tr></thead><tbody>`;
-    calc.results.forEach(r=>{
-      html += `<tr${r.prob === calc.best ? ' style="background:linear-gradient(90deg,#eef7ff,#fff);"' : ''}>
-        <td>[${r.index+1}] ${cards[r.index].c}${cards[r.index].n}${r.prob === calc.best ? ' ← 추천' : ''}</td>
-        <td>${r.success} / ${r.total}</td>
-        <td class="pct">${(r.prob*100).toFixed(2)}%</td>
-      </tr>`;
-    });
-    html += `</tbody></table>`;
-    const bestIndices = calc.results.filter(r=>r.prob === calc.best).map(r=>r.index);
-    html += `<div style="margin-top:10px;"><strong>추천:</strong> `;
-    if(calc.best === 0){
-      html += `어떤 상자를 초기화해도 목표 이상으로 올라갈 확률이 없습니다 (모든 확률 0%).`;
-    } else {
-      html += bestIndices.map(i=>`[${i+1}] ${cards[i].c}${cards[i].n}`).join(', ');
-      html += ` — 성공 확률 ${(calc.best*100).toFixed(2)}%`;
+
+    for(let v=startValue; v<=9; v++){
+      const calc = allRankResults[v];
+      html += `<h4 style="margin-top:12px;">목표: ${RANK_NAMES[v]} 이상</h4>`;
+      html += `<table><thead><tr><th>상자</th><th>성공 횟수 / 전체</th><th>성공 확률</th></tr></thead><tbody>`;
+      calc.results.forEach(r=>{
+        html += `<tr${r.prob === calc.best ? ' style="background:linear-gradient(90deg,#eef7ff,#fff);"' : ''}>
+          <td>[${r.index+1}] ${cards[r.index].c}${cards[r.index].n}${r.prob === calc.best ? ' ← 추천' : ''}</td>
+          <td>${r.success} / ${r.total}</td>
+          <td class="pct">${(r.prob*100).toFixed(2)}%</td>
+        </tr>`;
+      });
+      html += `</tbody></table>`;
     }
-    html += `</div>`;
 
     resultArea.innerHTML = html;
 
+    // 마지막 선택 목표에 대한 추천만 강조
+    const bestIndices = allRankResults[startValue].results.filter(r=>r.prob === allRankResults[startValue].best).map(r=>r.index);
     bestIndices.forEach(i=>{
       const el = document.querySelector(`.card[data-index="${i}"]`);
       if(el) el.classList.add('recommended');
@@ -210,8 +220,8 @@
 
   document.getElementById('calcBtn').addEventListener('click', ()=>{
     const minValue = parseInt(document.getElementById('targetRank').value, 10);
-    const calc = calculateAll(minValue);
-    showResults(calc);
+    const allRankResults = calculateAllRanks(minValue);
+    showResults(allRankResults, minValue);
   });
 
   document.getElementById('resetBtn').addEventListener('click', ()=>{
